@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Smash JS - Final Version</title>
+    <style>
+        body { background: #1a1a1a; color: white; text-align: center; font-family: 'Arial', sans-serif; overflow: hidden; margin: 0; }
+        canvas { border: 4px solid #333; background: #a5f3fc; display: block; margin: 10px auto; box-shadow: 0 0 30px rgba(0,0,0,0.7); }
+        .ui { font-size: 24px; font-weight: bold; margin-top: 10px; display: flex; justify-content: center; gap: 60px; }
+        .dmg-p1 { color: #ff4757; text-shadow: 1px 1px 2px black; }
+        .dmg-p2 { color: #576574; text-shadow: 1px 1px 2px black; }
+        .info { color: #aaa; font-size: 16px; margin: 5px; }
+        .boss-warning { color: #ff4757; font-weight: bold; animation: blink 0.5s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <div class="ui">
+        <div>ROUND: <span id="round-num">1</span> / 5</div>
+        <div class="dmg-p1">PLAYER: <span id="p1-dmg">0</span>%</div>
+        <div class="dmg-p2">ENEMY: <span id="p2-dmg">0</span>%</div>
+    </div>
+    <div id="warning-text" class="info"></div>
+    <canvas id="gameCanvas" width="800" height="450"></canvas>
+    <div class="info">A/D:移動 | ↑:2段ジャンプ | ↓:シールド | Space:ビーム | Enter:殴り</div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // ゲーム状態
+        const config = { gravity: 0.6, friction: 0.85, floorY: 380 };
+        let isGameOver = false;
+        let isFullClear = false;
+        let roundCount = 1;
+        let p1Wins = 0;
+        let enemyWins = 0;
+        let enemyBaseWeight = 0.5; // 初期の吹き飛び率
+        let bullets = [];
+        const keys = {};
+
+        class Character {
+            constructor(x, y, color, isAI = false) {
+                this.reset(x, y);
+                this.width = 40; this.height = 40;
+                this
