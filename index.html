@@ -43,4 +43,224 @@
             constructor(x, y, color, isAI = false) {
                 this.reset(x, y);
                 this.width = 40; this.height = 40;
-                this
+                this.color = color;
+                this.isAI = isAI;
+            }
+
+            reset(x, y) {
+                this.x = x; this.y = y;
+                this.vx = 0; this.vy = 0;
+                this.damage = 0;
+                this.direction = this.isAI ? -1 : 1;
+                this.jumpCount = 0;
+                this.isShieldActive = false;
+                this.shieldTimer = 0;
+                this.shieldCooldown = 0;
+                this.weight = this.isAI ? enemyBaseWeight : 1.0;
+            }
+
+            update() {
+                if (isGameOver) return;
+
+                // ラスボス変身
+                let currentWidth = (this.isAI && roundCount === 5) ? 60 : 40;
+                let currentHeight = (this.isAI && roundCount === 5) ? 60 : 40;
+
+                // シールド管理
+                if (this.shieldCooldown > 0) this.shieldCooldown--;
+                if (this.isShieldActive) {
+                    this.shieldTimer--;
+                    if (this.shieldTimer <= 0) {
+                        this.isShieldActive = false;
+                        this.shieldCooldown = 300;
+                    }
+                }
+
+                // 物理
+                this.vy += config.gravity;
+                this.vx *= config.friction;
+                this.x += this.vx;
+                this.y += this.vy;
+
+                // 地面
+                if (this.y + currentHeight > config.floorY) {
+                    this.y = config.floorY - currentHeight;
+                    this.vy = 0;
+                    this.jumpCount = 0;
+                }
+            }
+
+            draw() {
+                const isBoss = (this.isAI && roundCount === 5);
+                const w = isBoss ? 60 : 40;
+                const h = isBoss ? 60 : 40;
+                const bodyColor = isBoss ? "#4b0082" : this.color;
+
+                if (this.isShieldActive) {
+                    ctx.beginPath();
+                    ctx.arc(this.x + w/2, this.y + h/2, w * 0.9, 0, Math.PI * 2);
+                    ctx.fillStyle = isBoss ? "rgba(138, 43, 226, 0.5)" : "rgba(0, 150, 255, 0.5)";
+                    ctx.fill();
+                    ctx.strokeStyle = "white";
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = bodyColor;
+                ctx.fillRect(this.x, this.y, w, h);
+                ctx.fillStyle = "white"; // 目
+                ctx.fillRect(this.x + (this.direction === 1 ? w-15 : 5), this.y + 10, 10, 10);
+                
+                if (this.isAI) {
+                    ctx.fillStyle = "#fffa65";
+                    ctx.font = "12px Arial";
+                    ctx.fillText(`Weight: ${Math.round(this.weight * 100)}%`, this.x, this.y - 10);
+                }
+            }
+        }
+
+        const p1 = new Character(200, 300, '#ff4757');
+        const enemy = new Character(600, 300, '#2f3542', true);
+
+        // 攻撃判定
+        function meleeAttack(attacker, target) {
+            const isBoss = (attacker.isAI && roundCount === 5);
+            const rangeMult = isBoss ? 2.5 : 1;
+            const power = isBoss ? 20 : 12;
+
+            const hitBox = {
+                x: attacker.x + (attacker.direction === 1 ? (isBoss?60:40) : -30 * rangeMult),
+                y: attacker.y,
+                width: 30 * rangeMult,
+                height: 40 * rangeMult
+            };
+
+            if (!target.isShieldActive &&
+                hitBox.x < target.x + target.width && hitBox.x + hitBox.width > target.x &&
+                hitBox.y < target.y + target.height && hitBox.y + hitBox.height > target.y) {
+                
+                target.damage += power;
+                const kb = (target.damage / 10) * 6 * target.weight;
+                target.vx = attacker.direction * kb;
+                target.vy = -kb / 3;
+            }
+        }
+
+        function fireBullet(owner) {
+            const isBoss = (owner.isAI && roundCount === 5);
+            bullets.push({
+                x: owner.x + (owner.direction === 1 ? (isBoss?60:40) : -20),
+                y: owner.y + (isBoss?25:15),
+                vx: owner.direction * (isBoss ? 8 : 12),
+                life: 60,
+                owner: owner,
+                size: isBoss ? 30 : 15
+            });
+        }
+
+        // AI
+        function updateAI() {
+            if (isGameOver || enemy.isShieldActive) return;
+            const distX = p1.x - enemy.x;
+            if (Math.abs(distX) > (roundCount === 5 ? 150 : 100)) {
+                enemy.vx += distX > 0 ? 0.7 : -0.7;
+                enemy.direction = distX > 0 ? 1 : -1;
+            }
+            if (Math.random() < 0.02) {
+                if (Math.abs(distX) < 80) meleeAttack(enemy, p1);
+                else if (Math.abs(distX) > 200) fireBullet(enemy);
+            }
+            if (Math.random() < 0.01 && enemy.jumpCount < 2) { enemy.vy = -13; enemy.jumpCount++; }
+        }
+
+        function endGame(msg) {
+            isGameOver = true;
+            let finalVictory = false;
+            if (msg === "PLAYER WIN") {
+                p1Wins++;
+                if (roundCount === 5) finalVictory = true;
+                else { roundCount++; enemyBaseWeight *= 0.9; }
+            } else { enemyWins++; }
+
+            ctx.fillStyle = "rgba(0,0,0,0.85)";
+            ctx.fillRect(0,0,canvas.width, canvas.height);
+            ctx.textAlign = "center";
+
+            if (finalVictory) {
+                isFullClear = true;
+                ctx.fillStyle = "#f1c40f"; ctx.font = "bold 60px Arial";
+                ctx.fillText("CONGRATULATIONS!", canvas.width/2, 180);
+                ctx.fillStyle = "white"; ctx.font = "24px Arial";
+                ctx.fillText(`TOTAL SCORE: P1 [${p1Wins}] - [${enemyWins}] ENEMY`, canvas.width/2, 250);
+                ctx.fillText("Press R to Restart Game", canvas.width/2, 320);
+            } else {
+                ctx.fillStyle = "white"; ctx.font = "bold 50px Arial";
+                ctx.fillText("GAME SET", canvas.width/2, 180);
+                ctx.font = "24px Arial";
+                ctx.fillText(msg, canvas.width/2, 240);
+                ctx.fillText(`Next: Round ${roundCount}/5`, canvas.width/2, 280);
+                ctx.fillText("Press R for Next Round", canvas.width/2, 340);
+            }
+        }
+
+        // ループ
+        function loop() {
+            ctx.clearRect(0,0,canvas.width, canvas.height);
+            ctx.fillStyle = "#444";
+            ctx.fillRect(100, config.floorY, 600, 20);
+
+            if (!isGameOver) {
+                if (keys['KeyA'] && !p1.isShieldActive) { p1.vx -= 1.2; p1.direction = -1; }
+                if (keys['KeyD'] && !p1.isShieldActive) { p1.vx += 1.2; p1.direction = 1; }
+                updateAI();
+                p1.update();
+                enemy.update();
+
+                // 弾
+                bullets.forEach((b, i) => {
+                    b.x += b.vx; b.life--;
+                    ctx.fillStyle = b.owner === p1 ? "yellow" : "#a88bff";
+                    ctx.fillRect(b.x, b.y, b.size, b.size/3);
+                    const target = b.owner === p1 ? enemy : p1;
+                    if (!target.isShieldActive && b.x > target.x && b.x < target.x + target.width && b.y > target.y && b.y < target.y + target.height) {
+                        target.damage += 3;
+                        target.vx += b.vx * 0.1 * (target.damage / 50) * target.weight;
+                        bullets.splice(i, 1);
+                    }
+                    if (b.life < 0) bullets.splice(i, 1);
+                });
+
+                if (p1.x < -100 || p1.x > 900 || p1.y > 500) endGame("ENEMY WIN");
+                if (enemy.x < -100 || enemy.x > 900 || enemy.y > 500) endGame("PLAYER WIN");
+            }
+
+            p1.draw();
+            enemy.draw();
+            document.getElementById('p1-dmg').innerText = Math.floor(p1.damage);
+            document.getElementById('p2-dmg').innerText = Math.floor(enemy.damage);
+            document.getElementById('round-num').innerText = roundCount;
+            document.getElementById('warning-text').innerHTML = (roundCount === 5 && !isGameOver) ? "<span class='boss-warning'>FINAL BOSS WARNING</span>" : "";
+
+            requestAnimationFrame(loop);
+        }
+
+        // 入力
+        window.onkeydown = e => {
+            keys[e.code] = true;
+            if (e.code === 'ArrowUp' && !isGameOver) { if (p1.jumpCount < 2) { p1.vy = -13; p1.jumpCount++; } }
+            if (e.code === 'ArrowDown' && !isGameOver && p1.shieldCooldown <= 0) { p1.isShieldActive = true; p1.shieldTimer = 180; }
+            if (e.code === 'Space' && !isGameOver && !p1.isShieldActive) fireBullet(p1);
+            if (e.code === 'Enter' && !isGameOver && !p1.isShieldActive) meleeAttack(p1, enemy);
+            if (e.code === 'KeyR' && isGameOver) {
+                if (isFullClear) location.reload();
+                else { p1.reset(200, 300); enemy.reset(600, 300); bullets = []; isGameOver = false; }
+            }
+        };
+        window.onkeyup = e => {
+            keys[e.code] = false;
+            if (e.code === 'ArrowDown' && p1.isShieldActive) { p1.isShieldActive = false; p1.shieldCooldown = 300; }
+        };
+
+        loop();
+    </script>
+</body>
+</html>
